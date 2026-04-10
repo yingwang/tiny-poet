@@ -14,6 +14,7 @@ import os
 import pickle
 import random
 import sys
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -32,7 +33,11 @@ def fetch(url: str, dest: Path) -> bool:
         return True
     try:
         print(f"  fetching {url.rsplit('/', 1)[-1]}...", end=" ", flush=True)
-        urllib.request.urlretrieve(url, dest)
+        # URL-encode path (safe for non-ASCII segments like 全唐诗)
+        parsed = urllib.parse.urlsplit(url)
+        safe_path = urllib.parse.quote(parsed.path)
+        safe_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, safe_path, parsed.query, parsed.fragment))
+        urllib.request.urlretrieve(safe_url, dest)
         print("ok")
         return True
     except Exception as e:
