@@ -17,12 +17,24 @@
 
 默认用 `small`。对唐诗宋词这个数据量，`small` 和 `base` 差别不大，`base` 稍微过拟合一点但生成更有古味。
 
-## 快速开始
+## 快速开始（用训好的模型）
+
+想跳过训练直接玩生成？下载发布好的 checkpoint：
+
+```bash
+pip install torch numpy
+wget https://github.com/yingwang/tiny-poet/releases/download/v0.1/small_inference.pt
+python sample.py --ckpt small_inference.pt --prompt "春" --num_samples 3
+```
+
+v0.1 是 small 配置 7.72M 参数，在 iMac 2019 上训了 90 分钟，final loss 4.84。
+
+## 从零训练
 
 ### 本地（iMac / MacBook）
 
 ```bash
-pip install torch requests tqdm
+pip install torch numpy tqdm
 
 # 1. 下载数据（全唐诗 + 全宋词）
 python data.py
@@ -81,4 +93,21 @@ Softmax → next char probabilities
 - 全宋词：约 21k 首
 - 总 token 数：约 500 万字符
 
-字符级 tokenizer，vocab size 约 6000。
+字符级 tokenizer，实际 vocab size 11,601（简体 + 繁体 + 标点 + 少量异体字）。
+
+## 样本输出（v0.1 small）
+
+输入 `春`：
+> 春意，柳阴如雨。春似故人来醉。
+> 送友客
+> 別離辭別，春風欲多。白髮相逢客，寒枝半似春。
+
+输入 `月`：
+> 月·沈丘崈
+> 一点春容不见。无人有酒。不似花梢柳。花如玉。梅花风，也似西西子。
+
+输入 `江南`：
+> 江南·念奴娇·王安安岳
+> 春云已暮，不怕风流水。云树碧流沙外，江外一声寒水。
+
+（作者名是模型自己造的，词句大部分也是新生成而非训练数据原文）
