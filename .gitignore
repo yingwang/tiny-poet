@@ -1,0 +1,9 @@
+data/raw/
+data/*.bin
+data/*.pkl
+checkpoints/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
