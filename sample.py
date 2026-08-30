@@ -1,12 +1,11 @@
 """Generate poetry from a trained tiny-poet checkpoint.
 
 Usage:
-  python sample.py --ckpt checkpoints/small.pt --prompt "春眠不觉晓" --max_tokens 60
-  python sample.py --ckpt checkpoints/small.pt --prompt "蝶恋花" --temperature 0.8 --top_k 40
+  python sample.py --ckpt checkpoints/small_best.pt --prompt "春眠不觉晓" --max_tokens 60
+  python sample.py --ckpt checkpoints/small_best.pt --prompt "蝶恋花" --temperature 0.8 --top_k 40
 """
 
 import argparse
-from pathlib import Path
 
 import torch
 
@@ -15,14 +14,24 @@ from model import GPT, GPTConfig
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--ckpt", default="checkpoints/small.pt")
+    p.add_argument("--ckpt", default="checkpoints/small_best.pt")
     p.add_argument("--prompt", default="春")
     p.add_argument("--max_tokens", type=int, default=60)
     p.add_argument("--temperature", type=float, default=0.9)
     p.add_argument("--top_k", type=int, default=40)
     p.add_argument("--device", default="auto")
     p.add_argument("--num_samples", type=int, default=3)
+    p.add_argument("--seed", type=int, default=None)
     args = p.parse_args()
+
+    if args.max_tokens < 0:
+        p.error("--max_tokens must be non-negative")
+    if args.temperature < 0:
+        p.error("--temperature must be non-negative; use 0 for greedy decoding")
+    if args.top_k <= 0:
+        p.error("--top_k must be positive")
+    if args.num_samples <= 0:
+        p.error("--num_samples must be positive")
 
     if args.device == "auto":
         if torch.cuda.is_available():
@@ -31,6 +40,8 @@ def main():
             args.device = "mps"
         else:
             args.device = "cpu"
+    if args.seed is not None:
+        torch.manual_seed(args.seed)
 
     ckpt = torch.load(args.ckpt, map_location=args.device, weights_only=True)
     config = GPTConfig(**ckpt["config"])
@@ -41,7 +52,11 @@ def main():
     meta = ckpt["meta"]
     stoi, itos = meta["stoi"], meta["itos"]
 
-    # Filter prompt chars not in vocab
+    # Filter prompt chars not in vocab, but report any semantic change instead
+    # of silently turning (for example) "春🙂天" into "春天".
+    unknown_chars = sorted({char for char in args.prompt if char not in stoi})
+    if unknown_chars:
+        print(f"Warning: dropping out-of-vocabulary prompt chars: {unknown_chars}")
     prompt_ids = [stoi[c] for c in args.prompt if c in stoi]
     if not prompt_ids:
         print(f"Warning: no chars from '{args.prompt}' found in vocab, starting with '春'")

@@ -160,12 +160,30 @@ class GPT(nn.Module):
     @torch.no_grad()
     def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
         """Autoregressive generation with top-k sampling."""
+        if idx.ndim != 2 or idx.size(1) == 0:
+            raise ValueError("idx must have shape (batch, time) with at least one token")
+        if max_new_tokens < 0:
+            raise ValueError("max_new_tokens must be non-negative")
+        if temperature < 0:
+            raise ValueError("temperature must be non-negative")
+        if top_k is not None and top_k <= 0:
+            raise ValueError("top_k must be positive")
+
         for _ in range(max_new_tokens):
             # Crop context if too long
             idx_cond = idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size:]
 
             logits, _ = self(idx_cond)
-            logits = logits[:, -1, :] / temperature  # take last position
+            logits = logits[:, -1, :]  # take last position
+
+            # A temperature of zero is useful shorthand for deterministic,
+            # greedy decoding and avoids dividing logits by zero.
+            if temperature == 0:
+                next_idx = torch.argmax(logits, dim=-1, keepdim=True)
+                idx = torch.cat([idx, next_idx], dim=1)
+                continue
+
+            logits = logits / temperature
 
             if top_k is not None:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))

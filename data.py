@@ -9,8 +9,8 @@ Outputs:
   data/meta.pkl      — dict with itos, stoi, vocab_size
 """
 
+import argparse
 import json
-import os
 import pickle
 import random
 import sys
@@ -22,10 +22,16 @@ import numpy as np
 
 DATA_DIR = Path(__file__).parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
-RAW_DIR = DATA_DIR / "raw"
-RAW_DIR.mkdir(exist_ok=True)
+# Pin the corpus so different runs build the same dataset. Keep each revision in
+# its own cache directory so data downloaded by older versions is never reused
+# accidentally after the pin changes.
+REPO_REF = "b8594f81a89752241442f2ce267d6f66f96704ee"
+SPLIT_SEED = 42
+TRAIN_FRACTION = 0.95
+RAW_DIR = DATA_DIR / "raw" / REPO_REF[:12]
+RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-REPO = "https://raw.githubusercontent.com/chinese-poetry/chinese-poetry/master"
+REPO = f"https://raw.githubusercontent.com/chinese-poetry/chinese-poetry/{REPO_REF}"
 
 
 def fetch(url: str, dest: Path) -> bool:
@@ -50,9 +56,12 @@ def fetch(url: str, dest: Path) -> bool:
 
 
 def load_json(url: str, dest: Path):
-    """Fetch if needed and parse. Retries once if the local copy is corrupt."""
+    """Fetch and parse JSON, retrying one failed download or corrupt cache."""
     for attempt in (1, 2):
         if not fetch(url, dest):
+            if attempt == 1:
+                print(f"  ! retrying {dest.name}")
+                continue
             return None
         try:
             return json.loads(dest.read_text(encoding="utf-8"))
@@ -65,7 +74,16 @@ def load_json(url: str, dest: Path):
     return None
 
 
-def load_tang_poems() -> list[str]:
+def _check_complete(label: str, skipped: int, expected: int, allow_partial: bool) -> None:
+    if not skipped:
+        return
+    message = f"{skipped} of {expected} {label} files could not be read"
+    print(f"  WARNING: {message}")
+    if not allow_partial:
+        raise RuntimeError(f"{message}; refusing to build a partial dataset")
+
+
+def load_tang_poems(allow_partial: bool = False) -> list[str]:
     """Load 全唐诗 — 58 files, poet.tang.0.json to poet.tang.57000.json."""
     print("Loading 全唐诗...")
     poems = []
@@ -84,13 +102,11 @@ def load_tang_poems() -> list[str]:
             if title and body:
                 poems.append(f"{title}\n{body}\n")
     print(f"  loaded {len(poems)} Tang poems")
-    if skipped:
-        print(f"  WARNING: {skipped} of 58 Tang files could not be read; "
-              f"roughly {skipped * 1000} poems are missing from this run")
+    _check_complete("Tang", skipped, 58, allow_partial)
     return poems
 
 
-def load_song_ci() -> list[str]:
+def load_song_ci(allow_partial: bool = False) -> list[str]:
     """Load 全宋词 — files are ci.song.0.json to ci.song.21000.json."""
     print("Loading 全宋词...")
     ci = []
@@ -111,9 +127,7 @@ def load_song_ci() -> list[str]:
                 header = f"{tune}·{author}" if author else tune
                 ci.append(f"{header}\n{body}\n")
     print(f"  loaded {len(ci)} Song ci")
-    if skipped:
-        print(f"  WARNING: {skipped} of 22 Song ci files could not be read; "
-              f"roughly {skipped * 1000} pieces are missing from this run")
+    _check_complete("Song ci", skipped, 22, allow_partial)
     return ci
 
 
@@ -124,9 +138,33 @@ def build_vocab(text: str) -> tuple[dict, dict]:
     return stoi, itos
 
 
+def split_poems(
+    poems: list[str], train_fraction: float = TRAIN_FRACTION
+) -> tuple[list[str], list[str]]:
+    """Split whole works, never cutting a poem between train and validation."""
+    if len(poems) < 2:
+        raise ValueError("at least two poems are required for a train/validation split")
+    if not 0 < train_fraction < 1:
+        raise ValueError("train_fraction must be between 0 and 1")
+    split_at = max(1, min(len(poems) - 1, int(train_fraction * len(poems))))
+    return poems[:split_at], poems[split_at:]
+
+
 def main():
-    tang = load_tang_poems()
-    song = load_song_ci()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="build even if one or more corpus files cannot be downloaded",
+    )
+    args = parser.parse_args()
+
+    try:
+        tang = load_tang_poems(args.allow_partial)
+        song = load_song_ci(args.allow_partial)
+    except RuntimeError as exc:
+        print(f"ERROR: {exc}. Check the network and retry, or pass --allow-partial.")
+        sys.exit(1)
 
     if not tang and not song:
         print("ERROR: no data downloaded. Check network and try again.")
@@ -134,29 +172,43 @@ def main():
 
     # Shuffle and join with a separator
     all_poems = tang + song
-    random.seed(42)
-    random.shuffle(all_poems)
+    random.Random(SPLIT_SEED).shuffle(all_poems)
 
-    text = "\n".join(all_poems)
-    print(f"\nTotal characters: {len(text):,}")
+    train_poems, val_poems = split_poems(all_poems)
+    train_text = "\n".join(train_poems)
+    val_text = "\n".join(val_poems)
+    print(f"\nTotal characters: {len(train_text) + len(val_text):,}")
+    print(f"Works: {len(train_poems):,} train  {len(val_poems):,} val")
 
-    stoi, itos = build_vocab(text)
+    # Build one shared vocabulary, while keeping the actual sequences separate.
+    stoi, itos = build_vocab(train_text + val_text)
     print(f"Vocab size: {len(stoi)}")
+    if len(stoi) > np.iinfo(np.int16).max + 1:
+        raise ValueError("vocabulary is too large for the int16 dataset format")
 
     # Encode
-    data = np.array([stoi[c] for c in text], dtype=np.int16)
-    print(f"Encoded tokens: {len(data):,}")
-
-    # 95 / 5 train / val split
-    n = int(0.95 * len(data))
-    train, val = data[:n], data[n:]
+    train = np.array([stoi[c] for c in train_text], dtype=np.int16)
+    val = np.array([stoi[c] for c in val_text], dtype=np.int16)
+    print(f"Encoded tokens: {len(train) + len(val):,}")
     print(f"Train: {len(train):,}  Val: {len(val):,}")
 
     train.tofile(DATA_DIR / "train.bin")
     val.tofile(DATA_DIR / "val.bin")
 
     with open(DATA_DIR / "meta.pkl", "wb") as f:
-        pickle.dump({"stoi": stoi, "itos": itos, "vocab_size": len(stoi)}, f)
+        pickle.dump(
+            {
+                "stoi": stoi,
+                "itos": itos,
+                "vocab_size": len(stoi),
+                "corpus_ref": REPO_REF,
+                "split_seed": SPLIT_SEED,
+                "train_fraction": TRAIN_FRACTION,
+                "train_tokens": len(train),
+                "val_tokens": len(val),
+            },
+            f,
+        )
 
     print(f"\nSaved to {DATA_DIR}/")
     print("  train.bin  val.bin  meta.pkl")
