@@ -110,7 +110,7 @@ def main():
     ckpt_path = CKPT_DIR / f"{args.config}.pt"
     if args.resume and ckpt_path.exists():
         print(f"Resuming from {ckpt_path}")
-        ckpt = torch.load(ckpt_path, map_location=args.device)
+        ckpt = torch.load(ckpt_path, map_location=args.device, weights_only=True)
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         start_iter = ckpt["iter"] + 1

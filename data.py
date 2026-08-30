@@ -42,22 +42,40 @@ def fetch(url: str, dest: Path) -> bool:
         return True
     except Exception as e:
         print(f"failed: {e}")
+        # urlretrieve streams straight into dest, so an interrupted download
+        # leaves a truncated file behind. Delete it, or the next run sees
+        # dest.exists() and happily skips re-fetching a corrupt file.
+        dest.unlink(missing_ok=True)
         return False
+
+
+def load_json(url: str, dest: Path):
+    """Fetch if needed and parse. Retries once if the local copy is corrupt."""
+    for attempt in (1, 2):
+        if not fetch(url, dest):
+            return None
+        try:
+            return json.loads(dest.read_text(encoding="utf-8"))
+        except Exception as e:
+            dest.unlink(missing_ok=True)
+            if attempt == 1:
+                print(f"  ! {dest.name} was corrupt ({e}); re-downloading")
+            else:
+                print(f"  ! {dest.name} still unreadable ({e}); skipping it")
+    return None
 
 
 def load_tang_poems() -> list[str]:
     """Load 全唐诗 — 58 files, poet.tang.0.json to poet.tang.57000.json."""
     print("Loading 全唐诗...")
     poems = []
+    skipped = 0
     for i in range(0, 58000, 1000):
         fname = f"poet.tang.{i}.json"
         url = f"{REPO}/全唐诗/{fname}"
-        local = RAW_DIR / fname
-        if not fetch(url, local):
-            continue
-        try:
-            items = json.loads(local.read_text(encoding="utf-8"))
-        except Exception:
+        items = load_json(url, RAW_DIR / fname)
+        if items is None:
+            skipped += 1
             continue
         for item in items:
             title = item.get("title", "").strip()
@@ -66,6 +84,9 @@ def load_tang_poems() -> list[str]:
             if title and body:
                 poems.append(f"{title}\n{body}\n")
     print(f"  loaded {len(poems)} Tang poems")
+    if skipped:
+        print(f"  WARNING: {skipped} of 58 Tang files could not be read; "
+              f"roughly {skipped * 1000} poems are missing from this run")
     return poems
 
 
@@ -73,15 +94,13 @@ def load_song_ci() -> list[str]:
     """Load 全宋词 — files are ci.song.0.json to ci.song.21000.json."""
     print("Loading 全宋词...")
     ci = []
+    skipped = 0
     for i in range(0, 22000, 1000):
         fname = f"ci.song.{i}.json"
         url = f"{REPO}/宋词/{fname}"
-        local = RAW_DIR / fname
-        if not fetch(url, local):
-            continue
-        try:
-            items = json.loads(local.read_text(encoding="utf-8"))
-        except Exception:
+        items = load_json(url, RAW_DIR / fname)
+        if items is None:
+            skipped += 1
             continue
         for item in items:
             tune = item.get("rhythmic", "").strip()
@@ -92,6 +111,9 @@ def load_song_ci() -> list[str]:
                 header = f"{tune}·{author}" if author else tune
                 ci.append(f"{header}\n{body}\n")
     print(f"  loaded {len(ci)} Song ci")
+    if skipped:
+        print(f"  WARNING: {skipped} of 22 Song ci files could not be read; "
+              f"roughly {skipped * 1000} pieces are missing from this run")
     return ci
 
 

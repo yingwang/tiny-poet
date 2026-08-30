@@ -120,6 +120,15 @@ class GPT(nn.Module):
         # Init
         self.apply(self._init_weights)
 
+        # Scaled init for the residual output projections. Every block writes to
+        # the residual stream twice (attention and MLP), so without this the
+        # stream's variance grows with depth and deeper configs train less
+        # stably. Same trick as GPT-2 / nanoGPT.
+        residual_std = 0.02 / math.sqrt(2 * config.n_layer)
+        for name, param in self.named_parameters():
+            if name.endswith("c_proj.weight"):
+                nn.init.normal_(param, mean=0.0, std=residual_std)
+
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)

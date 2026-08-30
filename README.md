@@ -13,9 +13,13 @@ Single-file implementation (aside from data and tokenizer), under 500 lines of c
 
 | Config | Params | Colab T4 Training Time |
 |--------|--------|------------------------|
-| tiny | ~1.6M | 20-30 min |
-| small | ~6.3M | 1-2 hrs |
-| base | ~16.6M | 3-5 hrs |
+| tiny | 2.29M | 20-30 min |
+| small | 7.72M | 1-2 hrs |
+| base | 18.72M | 3-5 hrs |
+
+Parameter counts are for the real vocab of 11,601. The token embedding is a large share of a
+character-level model this size, so they run noticeably higher than the 6,000-vocab default in
+`GPTConfig` would suggest.
 
 Default is `small`. For this dataset size, `small` and `base` perform similarly — `base` overfits slightly more but produces text with a stronger classical flavor.
 
@@ -36,7 +40,7 @@ v0.1 uses the `small` config with 7.72M parameters, trained on an iMac 2019 for 
 ### Local (iMac / MacBook)
 
 ```bash
-pip install torch numpy tqdm
+pip install torch numpy
 
 # 1. Download data (Complete Tang Poems + Song Ci)
 python data.py
@@ -46,6 +50,9 @@ python train.py --config tiny --device cpu --iters 5000
 
 # 3. Generate
 python sample.py --prompt "春眠不觉晓" --max_tokens 50
+
+# 4. Optional: strip the optimizer state for a checkpoint worth sharing
+python export.py --ckpt checkpoints/tiny.pt
 ```
 
 ### Colab
@@ -53,7 +60,7 @@ python sample.py --prompt "春眠不觉晓" --max_tokens 50
 ```bash
 !git clone https://github.com/yingwang/tiny-poet.git
 %cd tiny-poet
-!pip install torch numpy tqdm
+!pip install torch numpy
 
 !python data.py
 !python train.py --config small --iters 10000
@@ -68,6 +75,7 @@ python sample.py --prompt "春眠不觉晓" --max_tokens 50
 - `model.py` — GPT architecture: embedding → N × transformer block → output
 - `train.py` — Training loop: AdamW + cosine schedule, checkpoint support
 - `sample.py` — Inference: top-k sampling
+- `export.py` — Strips optimizer state to produce a release-sized checkpoint
 
 ## Architecture
 
@@ -93,7 +101,7 @@ Standard GPT-style decoder-only transformer. No bells and whistles.
 Source: [chinese-poetry/chinese-poetry](https://github.com/chinese-poetry/chinese-poetry)
 - Complete Tang Poems: ~55k
 - Complete Song Ci: ~21k
-- Total tokens: ~5M characters
+- Total characters: ~6.2M
 
 Character-level tokenizer, vocab size 11,601 (simplified + traditional Chinese + punctuation + variant characters).
 
@@ -129,9 +137,12 @@ Author names are hallucinated by the model; most phrases are novel generations, 
 
 | 配置 | 参数量 | Colab T4 训练时间 |
 |------|--------|-------------------|
-| tiny | ~1.6M | 20-30分钟 |
-| small | ~6.3M | 1-2小时 |
-| base | ~16.6M | 3-5小时 |
+| tiny | 2.29M | 20-30分钟 |
+| small | 7.72M | 1-2小时 |
+| base | 18.72M | 3-5小时 |
+
+参数量按真实 vocab 11,601 计。字符级模型在这个尺度上 token embedding 占比很大，因此比 `GPTConfig`
+里默认的 6,000 vocab 算出来的数明显要高。
 
 默认用 `small`。对唐诗宋词这个数据量，`small` 和 `base` 差别不大，`base` 稍微过拟合一点但生成更有古味。
 
@@ -152,7 +163,7 @@ v0.1 是 small 配置 7.72M 参数，在 iMac 2019 上训了 90 分钟，final l
 ### 本地（iMac / MacBook）
 
 ```bash
-pip install torch numpy tqdm
+pip install torch numpy
 
 # 1. 下载数据（全唐诗 + 全宋词）
 python data.py
@@ -162,6 +173,9 @@ python train.py --config tiny --device cpu --iters 5000
 
 # 3. 生成
 python sample.py --prompt "春眠不觉晓" --max_tokens 50
+
+# 4. 可选：剥掉 optimizer state，得到适合分发的 checkpoint
+python export.py --ckpt checkpoints/tiny.pt
 ```
 
 ### Colab
@@ -169,7 +183,7 @@ python sample.py --prompt "春眠不觉晓" --max_tokens 50
 ```bash
 !git clone https://github.com/yingwang/tiny-poet.git
 %cd tiny-poet
-!pip install torch numpy tqdm
+!pip install torch numpy
 
 !python data.py
 !python train.py --config small --iters 10000
@@ -184,6 +198,7 @@ python sample.py --prompt "春眠不觉晓" --max_tokens 50
 - `model.py` — GPT 架构：embedding → N × transformer block → output
 - `train.py` — 训练循环：AdamW + cosine schedule，支持 checkpoint
 - `sample.py` — 推理：top-k 采样生成
+- `export.py` — 剥掉 optimizer state，产出发布用的精简 checkpoint
 
 ## 架构
 
@@ -209,7 +224,7 @@ Softmax → next char probabilities
 来源：[chinese-poetry/chinese-poetry](https://github.com/chinese-poetry/chinese-poetry)
 - 全唐诗：约 55k 首
 - 全宋词：约 21k 首
-- 总 token 数：约 500 万字符
+- 总字符数：约 620 万
 
 字符级 tokenizer，实际 vocab size 11,601（简体 + 繁体 + 标点 + 少量异体字）。
 

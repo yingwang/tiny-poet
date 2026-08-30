@@ -32,7 +32,7 @@ def main():
         else:
             args.device = "cpu"
 
-    ckpt = torch.load(args.ckpt, map_location=args.device, weights_only=False)
+    ckpt = torch.load(args.ckpt, map_location=args.device, weights_only=True)
     config = GPTConfig(**ckpt["config"])
     model = GPT(config).to(args.device)
     model.load_state_dict(ckpt["model"])
