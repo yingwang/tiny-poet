@@ -28,11 +28,11 @@ To generate directly from a released checkpoint, without training:
 
 ```bash
 pip install -r requirements.txt
-wget https://github.com/yingwang/tiny-poet/releases/download/v0.1/small_inference.pt
+wget https://github.com/yingwang/tiny-poet/releases/download/v0.2/small_inference.pt
 python sample.py --ckpt small_inference.pt --prompt "春" --num_samples 3
 ```
 
-Release v0.1 uses the `small` configuration at 7.72M parameters on the older, mixed-script vocabulary of 11,601 characters. It was trained on a 2019 iMac for 90 minutes, reaching a final loss of 4.84. Every checkpoint carries its own vocabulary, so old and new checkpoints both load; `sample.py` converts the prompt to the script the checkpoint was trained on.
+Release v0.2 is the `small` configuration at 6.57M parameters on the current 7,098-character simplified vocabulary, trained for 10,000 iterations (validation loss 4.15). The earlier v0.1 checkpoint (7.72M parameters, the mixed-script 11,601-character vocabulary, final loss 4.84) remains downloadable from the v0.1 release. Every checkpoint carries its own vocabulary, so old and new checkpoints both load; `sample.py` converts the prompt to the script the checkpoint was trained on.
 
 ## Training from Scratch
 
@@ -205,11 +205,11 @@ Project code is released under the MIT License. The downloaded chinese-poetry co
 
 ```bash
 pip install -r requirements.txt
-wget https://github.com/yingwang/tiny-poet/releases/download/v0.1/small_inference.pt
+wget https://github.com/yingwang/tiny-poet/releases/download/v0.2/small_inference.pt
 python sample.py --ckpt small_inference.pt --prompt "春" --num_samples 3
 ```
 
-v0.1 采用 `small` 配置，参数量 7.72M，词表是旧的简繁混杂版本（11,601 字），在 2019 款 iMac 上训练 90 分钟，最终 loss 为 4.84。每个 checkpoint 都自带词表，新旧版本都能加载；`sample.py` 会把提示词转换成 checkpoint 训练时所用的字体。
+v0.2 采用 `small` 配置，参数量 6.57M，词表为当前的简体版本（7,098 字），训练 10,000 步，验证 loss 4.15。此前的 v0.1 checkpoint（7.72M 参数、简繁混杂的 11,601 字词表、最终 loss 4.84）仍可从 v0.1 发布页下载。每个 checkpoint 都自带词表，新旧版本都能加载；`sample.py` 会把提示词转换成 checkpoint 训练时所用的字体。
 
 ## 从零训练
 
