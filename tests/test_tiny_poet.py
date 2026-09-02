@@ -11,7 +11,7 @@ import numpy as np
 import torch
 
 import train
-from data import _check_complete, split_poems
+from data import UNK_TOKEN, _check_complete, build_vocab, dedupe_works, encode, get_converter, normalize_script, split_poems
 from model import GPT, GPTConfig
 
 
@@ -23,6 +23,34 @@ class DataTests(unittest.TestCase):
         self.assertEqual(training, poems[:19])
         self.assertEqual(validation, poems[19:])
         self.assertFalse(set(training) & set(validation))
+
+    def test_duplicates_are_dropped_by_body_regardless_of_header_and_punctuation(self):
+        works = [
+            "静夜思\n床前明月光，疑是地上霜。\n",
+            "静夜思·李白\n床前明月光。疑是地上霜！\n",  # same poem, other punctuation
+            "春晓\n春眠不觉晓，处处闻啼鸟。\n",
+        ]
+        kept, dropped = dedupe_works(works)
+        self.assertEqual(dropped, 1)
+        self.assertEqual(kept, [works[0], works[2]])
+
+    def test_vocab_maps_rare_characters_to_unknown(self):
+        text = "春春春眠眠不"
+        stoi, itos = build_vocab(text, min_count=2)
+        self.assertEqual(itos[0], UNK_TOKEN)
+        self.assertIn("春", stoi)
+        self.assertIn("眠", stoi)
+        self.assertNotIn("不", stoi)
+        encoded = encode("春不晓", stoi).tolist()
+        self.assertEqual(encoded, [stoi["春"], 0, 0])
+
+    def test_script_normalization_unifies_traditional_and_simplified(self):
+        self.assertIsNone(get_converter("mixed"))
+        self.assertEqual(normalize_script("後來", None), "後來")
+        converter = get_converter("simplified")
+        self.assertEqual(normalize_script("春眠不覺曉，處處聞啼鳥。", converter), "春眠不觉晓，处处闻啼鸟。")
+        with self.assertRaises(ValueError):
+            get_converter("klingon")
 
     def test_partial_corpus_is_strict_by_default(self):
         with redirect_stdout(io.StringIO()):

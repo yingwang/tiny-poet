@@ -52,14 +52,29 @@ def main():
     meta = ckpt["meta"]
     stoi, itos = meta["stoi"], meta["itos"]
 
+    # A checkpoint trained on a normalized corpus expects prompts in that script;
+    # convert so a traditional prompt to a simplified model is not thrown away as
+    # out-of-vocabulary characters.
+    prompt = args.prompt
+    script = meta.get("script")
+    if script in ("simplified", "traditional"):
+        try:
+            import opencc
+
+            prompt = opencc.OpenCC("t2s" if script == "simplified" else "s2t").convert(prompt)
+        except ImportError:
+            print(f"Warning: model expects {script} characters; install opencc-python-reimplemented to convert prompts")
+    if prompt != args.prompt:
+        print(f"Prompt converted to {script}: {prompt}")
+
     # Filter prompt chars not in vocab, but report any semantic change instead
     # of silently turning (for example) "春🙂天" into "春天".
-    unknown_chars = sorted({char for char in args.prompt if char not in stoi})
+    unknown_chars = sorted({char for char in prompt if char not in stoi})
     if unknown_chars:
         print(f"Warning: dropping out-of-vocabulary prompt chars: {unknown_chars}")
-    prompt_ids = [stoi[c] for c in args.prompt if c in stoi]
+    prompt_ids = [stoi[c] for c in prompt if c in stoi]
     if not prompt_ids:
-        print(f"Warning: no chars from '{args.prompt}' found in vocab, starting with '春'")
+        print(f"Warning: no chars from '{prompt}' found in vocab, starting with '春'")
         prompt_ids = [stoi.get("春", 0)]
 
     x = torch.tensor([prompt_ids], dtype=torch.long, device=args.device)

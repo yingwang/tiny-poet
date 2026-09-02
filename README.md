@@ -14,11 +14,11 @@ The core model and training loop are self-contained and run to fewer than 500 li
 
 | Config | Params | Colab T4 Training Time |
 |--------|--------|------------------------|
-| tiny | 2.29M | 20-30 min |
-| small | 7.72M | 1-2 hrs |
-| base | 18.72M | 3-5 hrs |
+| tiny | 1.71M | 20-30 min |
+| small | 6.57M | 1-2 hrs |
+| base | 16.99M | 3-5 hrs |
 
-Parameter counts are given for the actual vocabulary of 11,601 characters. The token embedding accounts for a substantial share of a character-level model at this scale, so these figures run appreciably higher than the 6,000-vocabulary default in `GPTConfig` would suggest.
+Parameter counts are given for the actual vocabulary of 7,098 characters that `data.py` now produces (the v0.1 release was trained on 11,601; see Data). The token embedding accounts for a substantial share of a character-level model at this scale, so these figures run higher than the 6,000-vocabulary default in `GPTConfig` would suggest.
 
 The default configuration is `small`. At this dataset size `small` and `base` perform comparably; `base` overfits somewhat more, but its output carries a stronger classical register.
 
@@ -27,19 +27,19 @@ The default configuration is `small`. At this dataset size `small` and `base` pe
 To generate directly from a released checkpoint, without training:
 
 ```bash
-pip install torch numpy
+pip install -r requirements.txt
 wget https://github.com/yingwang/tiny-poet/releases/download/v0.1/small_inference.pt
 python sample.py --ckpt small_inference.pt --prompt "春" --num_samples 3
 ```
 
-Release v0.1 uses the `small` configuration at 7.72M parameters. It was trained on a 2019 iMac for 90 minutes, reaching a final loss of 4.84.
+Release v0.1 uses the `small` configuration at 7.72M parameters on the older, mixed-script vocabulary of 11,601 characters. It was trained on a 2019 iMac for 90 minutes, reaching a final loss of 4.84. Every checkpoint carries its own vocabulary, so old and new checkpoints both load; `sample.py` converts the prompt to the script the checkpoint was trained on.
 
 ## Training from Scratch
 
 ### Local (iMac / MacBook)
 
 ```bash
-pip install torch numpy
+pip install -r requirements.txt
 
 # 1. Download and preprocess the pinned corpus (Complete Tang Poems + Song Ci)
 python data.py
@@ -59,7 +59,7 @@ python export.py --ckpt checkpoints/tiny_best.pt
 ```bash
 !git clone https://github.com/yingwang/tiny-poet.git
 %cd tiny-poet
-!pip install torch numpy
+!pip install -r requirements.txt
 
 !python data.py
 !python train.py --config small --iters 10000
@@ -88,7 +88,7 @@ python -m unittest discover -s tests -v
 
 ## Files
 
-- `data.py` — Downloads and cleans the chinese-poetry corpus at the character level
+- `data.py` — Downloads the chinese-poetry corpus, normalizes its script, drops duplicate works, and builds the character vocabulary
 - `model.py` — GPT architecture: embedding → N × transformer block → output
 - `train.py` — Training loop: AdamW with a cosine schedule, checkpoint support
 - `sample.py` — Inference by top-k sampling
@@ -120,13 +120,15 @@ Source: [chinese-poetry/chinese-poetry](https://github.com/chinese-poetry/chines
 
 Preprocessing retries failed files and stops rather than silently creating a partial corpus. Use `python data.py --allow-partial` only when an incomplete dataset is intentional.
 
-- Complete Tang Poems: approximately 55,000 pieces
-- Complete Song Ci: approximately 21,000 pieces
-- Total characters: approximately 6.2M
+The upstream corpus is not in one script: the Tang poems are stored in traditional characters and the Song ci in simplified. Trained on that mixture, a character-level model learns that traditional means shi and simplified means ci, and mixes both scripts inside one poem (the v0.1 samples below show it). `data.py` therefore converts everything to simplified with OpenCC (`--script traditional` converts the other way; `--script mixed` keeps the upstream text). It also drops later copies of a work whose body already appeared, punctuation aside (984 of them, which would otherwise straddle the train/validation split), and files each Song ci under its tune name alone, without the author, so the model stops following every tune with an invented name.
 
-Character-level tokenizer with a vocabulary of 11,601, covering simplified and traditional forms, punctuation, and a small number of variant characters.
+- Complete Tang Poems: 57,435 pieces
+- Complete Song Ci: 21,050 pieces
+- After de-duplication: 77,501 works, 6.07M characters (95% train, 5% validation, split by whole works)
 
-## Sample Output (v0.1 small)
+Character-level tokenizer. Characters seen fewer than three times in the training text (`--min-count`) map to one unknown token, `□`; that removes about 4,500 characters that appeared once or twice in six million and leaves a vocabulary of 7,098. The unknown token covers 0.14% of the tokens.
+
+## Sample Output (v0.1 small, mixed-script vocabulary)
 
 Prompt `春`:
 > 春意，柳阴如雨。春似故人来醉。
@@ -141,7 +143,7 @@ Prompt `江南`:
 > 江南·念奴娇·王安安岳
 > 春云已暮，不怕风流水。云树碧流沙外，江外一声寒水。
 
-Author names are generated by the model. No systematic memorization audit has yet been performed, so generated text should be checked against the source corpus before publication.
+Author names in these samples are generated by the model (the current data pipeline no longer feeds it authors). No systematic memorization audit has yet been performed, so generated text should be checked against the source corpus before publication.
 
 ## License
 
@@ -163,11 +165,11 @@ Project code is released under the MIT License. The downloaded chinese-poetry co
 
 | 配置 | 参数量 | Colab T4 训练时间 |
 |------|--------|-------------------|
-| tiny | 2.29M | 20-30分钟 |
-| small | 7.72M | 1-2小时 |
-| base | 18.72M | 3-5小时 |
+| tiny | 1.71M | 20-30分钟 |
+| small | 6.57M | 1-2小时 |
+| base | 16.99M | 3-5小时 |
 
-参数量按实际词表 11,601 计算。字符级模型在这一量级上 token embedding 占比较大，因此该数值明显高于按 `GPTConfig` 中默认的 6,000 词表所得的结果。
+参数量按 `data.py` 现在产出的实际词表 7,098 计算（v0.1 发布版训练时词表为 11,601，见「数据」一节）。字符级模型在这一量级上 token embedding 占比较大，因此该数值高于按 `GPTConfig` 中默认的 6,000 词表所得的结果。
 
 默认配置为 `small`。在当前数据规模下，`small` 与 `base` 表现相近，`base` 的过拟合略为明显，但生成结果的古典气息更浓。
 
@@ -176,19 +178,19 @@ Project code is released under the MIT License. The downloaded chinese-poetry co
 若希望跳过训练环节，直接从已发布的 checkpoint 生成：
 
 ```bash
-pip install torch numpy
+pip install -r requirements.txt
 wget https://github.com/yingwang/tiny-poet/releases/download/v0.1/small_inference.pt
 python sample.py --ckpt small_inference.pt --prompt "春" --num_samples 3
 ```
 
-v0.1 采用 `small` 配置，参数量 7.72M，在 2019 款 iMac 上训练 90 分钟，最终 loss 为 4.84。
+v0.1 采用 `small` 配置，参数量 7.72M，词表是旧的简繁混杂版本（11,601 字），在 2019 款 iMac 上训练 90 分钟，最终 loss 为 4.84。每个 checkpoint 都自带词表，新旧版本都能加载；`sample.py` 会把提示词转换成 checkpoint 训练时所用的字体。
 
 ## 从零训练
 
 ### 本地（iMac / MacBook）
 
 ```bash
-pip install torch numpy
+pip install -r requirements.txt
 
 # 1. 下载并预处理已锁定版本的语料（全唐诗 + 全宋词）
 python data.py
@@ -208,7 +210,7 @@ python export.py --ckpt checkpoints/tiny_best.pt
 ```bash
 !git clone https://github.com/yingwang/tiny-poet.git
 %cd tiny-poet
-!pip install torch numpy
+!pip install -r requirements.txt
 
 !python data.py
 !python train.py --config small --iters 10000
@@ -237,7 +239,7 @@ python -m unittest discover -s tests -v
 
 ## 文件说明
 
-- `data.py`：下载并清洗 chinese-poetry 语料（字符级）
+- `data.py`：下载 chinese-poetry 语料，统一字体，去除重复作品，构建字符级词表
 - `model.py`：GPT 架构，embedding → N × transformer block → output
 - `train.py`：训练循环，AdamW 配合 cosine schedule，支持 checkpoint
 - `sample.py`：推理，采用 top-k 采样
@@ -269,13 +271,15 @@ Softmax → next char probabilities
 
 预处理会重试失败文件，并默认拒绝生成残缺语料。只有明确需要不完整数据集时才使用 `python data.py --allow-partial`。
 
-- 全唐诗：约 55,000 首
-- 全宋词：约 21,000 首
-- 总字符数：约 620 万
+上游语料并非同一种字体：全唐诗以繁体存储，全宋词以简体存储。直接在这样的混合语料上训练，字符级模型会学到「繁体即诗、简体即词」的假规律，并在同一首作品里混用两种字体（下方 v0.1 的样本即是如此）。因此 `data.py` 用 OpenCC 把全部文本统一为简体（`--script traditional` 反向转换，`--script mixed` 保留上游原文）。它还会按正文去重，标点不计（共 984 首，否则同一首诗会同时落在训练集和验证集两侧），并把每首宋词只按词牌归档、不带作者，模型也就不再在每个词牌后面编造一个人名。
 
-字符级 tokenizer，词表规模 11,601，涵盖简体、繁体、标点以及少量异体字。
+- 全唐诗：57,435 首
+- 全宋词：21,050 首
+- 去重后：77,501 首，607 万字（按整首切分，95% 训练、5% 验证）
 
-## 样本输出（v0.1 small）
+字符级 tokenizer。训练文本中出现不足三次的字（`--min-count`）映射为一个未知符号 `□`，由此去掉约 4,500 个在六百万字里只出现一两次的字，词表规模为 7,098。未知符号占全部 token 的 0.14%。
+
+## 样本输出（v0.1 small，简繁混杂词表）
 
 输入 `春`：
 > 春意，柳阴如雨。春似故人来醉。
@@ -290,7 +294,7 @@ Softmax → next char probabilities
 > 江南·念奴娇·王安安岳
 > 春云已暮，不怕风流水。云树碧流沙外，江外一声寒水。
 
-作者名由模型生成。目前尚未进行系统的记忆性审计，公开使用生成文本前应与源语料核对。
+这些样本里的作者名由模型生成（现在的数据流水线已不再把作者喂给模型）。目前尚未进行系统的记忆性审计，公开使用生成文本前应与源语料核对。
 
 ## 许可证
 
