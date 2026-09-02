@@ -128,6 +128,32 @@ The upstream corpus is not in one script: the Tang poems are stored in tradition
 
 Character-level tokenizer. Characters seen fewer than three times in the training text (`--min-count`) map to one unknown token, `□`; that removes about 4,500 characters that appeared once or twice in six million and leaves a vocabulary of 7,098. The unknown token covers 0.14% of the tokens.
 
+## Sample Output (current pipeline, small, 10,000 iterations)
+
+Trained on a 2019 iMac (Metal) in about 3.5 hours: validation loss fell from 5.57 at iteration 500 to 4.15 at 10,000 and was still easing at the end, so the run is not overfitting. The loss is not comparable with v0.1's 4.84, since the vocabulary changed. Samples with `--seed 7`, `--temperature 0.9`, `--top_k 40`:
+
+Prompt `春`:
+> 春愁。莫言千里去，莫遣一江流。
+> 题郑谷府公主园林
+> 地与山川旧隐居，闲门竹竹似经书。何当世事知心静，犹得清光独赏初。
+
+Prompt `月`:
+> 月高
+> 风高一望是重阳，千里孤光万里乡。一点秋山过江岸，碧云红树在东央。
+> 寄远十九
+> 忆昔年来几度春，见君犹得独为人。
+
+Prompt `江南`:
+> 江南・忆江南
+> 忆去日、春风无数。日转小池亭下草。柳色浅、春光如旧。东风只道青门远。回首两行愁绪在。花外雨、酒边烟。
+
+Prompt `春眠不觉晓`:
+> 春眠不觉晓，云影几千间。
+> 送友人游江南
+> 春雨一帆斜照沙，江山万里隔烟霞。归来好鸟无家住，为见春愁一点瓜。
+
+One script throughout, no invented author after a tune name, and a steadier five- and seven-character metre than v0.1. The corpus still contains the 兵要望江南 divination ci with their collation notes (`京本作…`), which both versions occasionally reproduce; filtering those titles out is the obvious next data step.
+
 ## Sample Output (v0.1 small, mixed-script vocabulary)
 
 Prompt `春`:
@@ -278,6 +304,32 @@ Softmax → next char probabilities
 - 去重后：77,501 首，607 万字（按整首切分，95% 训练、5% 验证）
 
 字符级 tokenizer。训练文本中出现不足三次的字（`--min-count`）映射为一个未知符号 `□`，由此去掉约 4,500 个在六百万字里只出现一两次的字，词表规模为 7,098。未知符号占全部 token 的 0.14%。
+
+## 样本输出（当前流水线，small，10,000 步）
+
+在 2019 款 iMac（Metal）上训练约三个半小时：验证 loss 从第 500 步的 5.57 降到第 10,000 步的 4.15，末段仍在缓慢下降，没有过拟合。该数值与 v0.1 的 4.84 不可直接比较，因为词表已经不同。样本参数为 `--seed 7`、`--temperature 0.9`、`--top_k 40`：
+
+输入 `春`：
+> 春愁。莫言千里去，莫遣一江流。
+> 题郑谷府公主园林
+> 地与山川旧隐居，闲门竹竹似经书。何当世事知心静，犹得清光独赏初。
+
+输入 `月`：
+> 月高
+> 风高一望是重阳，千里孤光万里乡。一点秋山过江岸，碧云红树在东央。
+> 寄远十九
+> 忆昔年来几度春，见君犹得独为人。
+
+输入 `江南`：
+> 江南・忆江南
+> 忆去日、春风无数。日转小池亭下草。柳色浅、春光如旧。东风只道青门远。回首两行愁绪在。花外雨、酒边烟。
+
+输入 `春眠不觉晓`：
+> 春眠不觉晓，云影几千间。
+> 送友人游江南
+> 春雨一帆斜照沙，江山万里隔烟霞。归来好鸟无家住，为见春愁一点瓜。
+
+全文只有一种字体，词牌之后不再出现编造的作者名，五言与七言的格律感也比 v0.1 稳定。语料中仍有《兵要望江南》一类带校勘注释（`京本作…`）的军占词，两个版本偶尔都会复现；把这类标题从语料中剔除是下一步显而易见的数据工作。
 
 ## 样本输出（v0.1 small，简繁混杂词表）
 
